@@ -75,7 +75,7 @@
         const password = document.getElementById('password').value;
         const statusDiv = document.getElementById('status-message');
 
-        const payload = { username: email, password: password };
+        const payload = { email: email, password: password };
         const endpoint = currentMode === 'signup' ? '/api/register' : '/api/login';
         const apiUrl = `http://localhost:8080${endpoint}`;
 

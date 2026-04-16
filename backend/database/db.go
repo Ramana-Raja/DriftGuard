@@ -2,9 +2,10 @@ package database
 
 import (
 	"fmt"
+	"log"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"log"
 )
 
 type DB struct {
@@ -19,10 +20,22 @@ func NewDB(host, port, user, password, dbname string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	err = conn.AutoMigrate(
+		&UserAuth{},
+		&UserProfile{},
+		&Project{},
+		&Model{},
+	)
+	if err != nil {
+		return nil, err
+	}
 	log.Println("Connection successful to database")
 	return &DB{conn: conn}, nil
 }
-
+func (db *DB) Create(value interface{}) *gorm.DB {
+	return db.conn.Create(value)
+}
 func (db *DB) Close() error {
 	sqlDB, err := db.conn.DB()
 	if err != nil {

@@ -43,7 +43,7 @@ func main() {
 
 	r := gin.Default()
 	r.Use(cors.Default())
-	r.POST("/api/register", controllers.Register)
+	r.POST("/api/register", controllers.Register(db))
 
 	r.Run(":8080")
 }
