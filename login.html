@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DriftGuard - Authentication</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-white flex items-center justify-center min-h-screen font-sans">
+
+<div class="w-full max-w-md bg-gray-900 rounded-xl shadow-2xl border border-gray-800 p-8">
+
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">DriftGuard</h1>
+        <p class="text-gray-400 mt-2 text-sm" id="form-subtitle">Welcome back</p>
+    </div>
+
+    <div class="flex bg-gray-800 p-1 rounded-lg mb-6">
+        <button id="tab-login" onclick="toggleMode('login')" class="flex-1 py-2 rounded-md bg-gray-700 font-medium text-white transition-all">Sign In</button>
+        <button id="tab-signup" onclick="toggleMode('signup')" class="flex-1 py-2 rounded-md text-gray-400 font-medium hover:text-white transition-all">Create Account</button>
+    </div>
+
+    <form id="auth-form" onsubmit="handleSubmit(event)" class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Email Address</label>
+            <input type="email" id="email" required placeholder="you@example.com" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white placeholder-gray-600 transition-colors">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+            <input type="password" id="password" required placeholder="••••••••" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white placeholder-gray-600 transition-colors">
+        </div>
+
+        <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-lg mt-6 transition-colors shadow-lg shadow-blue-500/30">
+            Sign In
+        </button>
+    </form>
+
+    <div id="status-message" class="mt-4 text-sm text-center hidden"></div>
+</div>
+
+<script>
+    let currentMode = 'login';
+
+    function toggleMode(mode) {
+        currentMode = mode;
+        const tabLogin = document.getElementById('tab-login');
+        const tabSignup = document.getElementById('tab-signup');
+        const submitBtn = document.getElementById('submit-btn');
+        const subtitle = document.getElementById('form-subtitle');
+
+        if (mode === 'signup') {
+            tabSignup.classList.add('bg-gray-700', 'text-white');
+            tabSignup.classList.remove('text-gray-400');
+            tabLogin.classList.remove('bg-gray-700', 'text-white');
+            tabLogin.classList.add('text-gray-400');
+
+            submitBtn.innerText = 'Create Account';
+            subtitle.innerText = 'Start monitoring your ML models';
+        } else {
+            tabLogin.classList.add('bg-gray-700', 'text-white');
+            tabLogin.classList.remove('text-gray-400');
+            tabSignup.classList.remove('bg-gray-700', 'text-white');
+            tabSignup.classList.add('text-gray-400');
+
+            submitBtn.innerText = 'Sign In';
+            subtitle.innerText = 'Welcome back';
+        }
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const statusDiv = document.getElementById('status-message');
+
+        const payload = { username: email, password: password };
+        const endpoint = currentMode === 'signup' ? '/api/register' : '/api/login';
+        const apiUrl = `http://localhost:8080${endpoint}`;
+
+        try {
+            statusDiv.classList.remove('hidden', 'text-red-400', 'text-green-400');
+            statusDiv.classList.add('text-gray-400');
+            statusDiv.innerText = `Connecting...`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                statusDiv.classList.replace('text-gray-400', 'text-green-400');
+                statusDiv.innerText = `Success!`;
+                localStorage.setItem('driftguard_jwt', data.token);
+            } else {
+                statusDiv.classList.replace('text-gray-400', 'text-red-400');
+                statusDiv.innerText = `Error: ${data.message || 'Failed'}`;
+            }
+        } catch (error) {
+            statusDiv.classList.replace('text-gray-400', 'text-red-400');
+            statusDiv.innerText = `Network error. Is your backend running?`;
+        }
+    }
+</script>
+</body>
+</html>
