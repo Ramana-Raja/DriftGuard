@@ -4,9 +4,8 @@ import "gorm.io/gorm"
 
 type UserAuth struct {
 	gorm.Model
-	Email       string `json:"email" gorm:"unique;not null"`
-	Password    string `json:"-"`
-	LastLoginIP string `json:"last_login_ip"`
+	Email    string `json:"email" gorm:"unique;not null"`
+	Password string `json:"-"`
 
 	Profile UserProfile `json:"profile"`
 }

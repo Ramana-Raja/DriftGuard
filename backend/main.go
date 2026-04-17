@@ -32,18 +32,18 @@ func main() {
 		dbname = "myapp"
 	}
 
-	db, err := database.NewDB(host, port, user, password, dbname)
+	database.NewDB(host, port, user, password, dbname)
 
+	sqlDB, err := database.DB.DB()
 	if err != nil {
 		log.Fatal(err)
-		os.Exit(1)
 	}
-
-	defer db.Close()
+	defer sqlDB.Close()
 
 	r := gin.Default()
 	r.Use(cors.Default())
-	r.POST("/api/register", controllers.Register(db))
+	r.POST("/api/register", controllers.Register)
+	r.POST("/api/login", controllers.Login)
 
 	r.Run(":8080")
 }
