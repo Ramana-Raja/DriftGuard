@@ -2,10 +2,10 @@ package controllers
 
 import (
 	"DriftGuard/backend/database"
-	"net/http"
-
+	"DriftGuard/backend/utils"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"net/http"
 )
 
 type RegisterInput struct {
@@ -38,7 +38,7 @@ func Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "registered successfully",
+		"message": "succes",
 	})
 }
 
@@ -60,8 +60,13 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
+	token, err := utils.GenerateToken(user.ID)
 
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get token"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"message": "success",
+		"token": token,
 	})
 }

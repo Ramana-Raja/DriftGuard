@@ -3,6 +3,7 @@ package main
 import (
 	"DriftGuard/backend/controllers"
 	"DriftGuard/backend/database"
+	"DriftGuard/backend/middleware"
 	"log"
 	"os"
 
@@ -45,5 +46,11 @@ func main() {
 	r.POST("/api/register", controllers.Register)
 	r.POST("/api/login", controllers.Login)
 
+	protected := r.Group("/api")
+
+	protected.Use(middleware.JwtHandler())
+	{
+
+	}
 	r.Run(":8080")
 }

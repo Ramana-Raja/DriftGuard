@@ -93,12 +93,13 @@
             const data = await response.json();
 
             if (response.ok) {
-                statusDiv.classList.replace('text-gray-400', 'text-green-400');
-                statusDiv.innerText = `Success!`;
                 localStorage.setItem('driftguard_jwt', data.token);
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('dashboard-section').classList.remove('hidden');
+                statusDiv.classList.add('hidden');
             } else {
                 statusDiv.classList.replace('text-gray-400', 'text-red-400');
-                statusDiv.innerText = `Error: ${data.message || 'Failed'}`;
+                statusDiv.innerText = `Error: ${data.error || 'Failed'}`;
             }
         } catch (error) {
             statusDiv.classList.replace('text-gray-400', 'text-red-400');
