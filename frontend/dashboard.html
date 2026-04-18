@@ -199,16 +199,18 @@
 
     function showActiveProjectView(project) {
         currentProjectId = project.ID;
+
         document.getElementById('view-create-project').classList.add('hidden');
         document.getElementById('view-active-project').classList.remove('hidden');
         document.getElementById('view-active-project').classList.add('flex');
-
-        document.getElementById('active-proj-name').innerText = project.name;
+        
+        document.getElementById('active-proj-name').innerText = project.project_name;
         document.getElementById('active-proj-desc').innerText = project.description || 'No description provided.';
 
         document.querySelectorAll('.project-item').forEach(el => {
             el.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-blue-500');
         });
+
         const activeLi = document.getElementById(`proj-link-${project.ID}`);
         if (activeLi) {
             activeLi.classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-l-2', 'border-blue-500');
@@ -245,13 +247,16 @@
 
         projects.forEach(proj => {
             const li = document.createElement('li');
+
             li.innerHTML = `
-                    <button id="proj-link-${proj.ID}" onclick='showActiveProjectView(${JSON.stringify(proj)})'
-                            class="project-item w-full text-left px-3 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors flex items-center gap-3 text-sm font-medium border-l-2 border-transparent">
-                        <i class="ph-fill ph-folder text-gray-400 dark:text-gray-500"></i>
-                        <span class="truncate">${proj.name}</span>
-                    </button>
-                `;
+                <button id="proj-link-${proj.ID}" onclick='showActiveProjectView(${JSON.stringify(proj)})'
+                        class="project-item w-full text-left px-3 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors flex items-center gap-3 text-sm font-medium border-l-2 border-transparent">
+                    <i class="ph-fill ph-folder text-gray-400 dark:text-gray-500"></i>
+
+                    <span class="truncate">${proj.project_name}</span>
+                </button>
+            `;
+
             listEl.appendChild(li);
         });
     }

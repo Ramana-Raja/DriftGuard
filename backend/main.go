@@ -5,10 +5,11 @@ import (
 	"DriftGuard/backend/database"
 	"DriftGuard/backend/middleware"
 	"DriftGuard/backend/models"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	"log"
 	"os"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -55,6 +56,8 @@ func main() {
 	{
 		protected.GET("/me", models.Getemail)
 		protected.GET("/projects", models.GetProejcts)
+		protected.POST("/projects", models.CreateProjects)
+
 	}
 	r.Run(":8080")
 }

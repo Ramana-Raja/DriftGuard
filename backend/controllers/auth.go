@@ -36,7 +36,15 @@ func Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		return
 	}
+	profile := database.UserProfile{
+		UserAuthID:  user.ID,
+		DisplayName: input.Email,
+	}
 
+	if err := database.DB.Create(&profile).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create profile"})
+		return
+	}
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "succes",
 	})
