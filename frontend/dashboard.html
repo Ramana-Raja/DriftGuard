@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" class="dark"> <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DriftGuard - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Tell Tailwind to trigger dark mode manually via a class
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white font-sans overflow-hidden h-screen flex transition-colors duration-200">
+
+<aside class="w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col justify-between flex-shrink-0 transition-colors duration-200">
+
+    <div class="p-5 flex flex-col gap-6">
+        <div class="flex items-center gap-2">
+            <i class="ph-fill ph-shield-check text-emerald-500 dark:text-emerald-400 text-3xl"></i>
+            <h1 class="text-xl font-bold bg-gradient-to-r from-blue-500 to-emerald-500 dark:from-blue-400 dark:to-emerald-400 bg-clip-text text-transparent">DriftGuard</h1>
+        </div>
+
+        <button onclick="showCreateProjectView()" class="flex items-center justify-center gap-2 w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white py-2.5 rounded-lg transition-colors text-sm font-medium shadow-sm">
+            <i class="ph ph-plus font-bold"></i>
+            New Project
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-3 pb-4 custom-scrollbar">
+        <h2 class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3 px-2">Your Projects</h2>
+        <ul id="project-list" class="space-y-1">
+            <li class="px-2 py-3 text-sm text-gray-500 dark:text-gray-400 text-center italic" id="loading-projects">Loading projects...</li>
+        </ul>
+    </div>
+
+    <div class="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-emerald-400 dark:from-blue-600 dark:to-emerald-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-sm">
+                    U
+                </div>
+                <div class="truncate">
+                    <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate" id="user-email">user@example.com</p>
+                    <p class="text-xs text-gray-500">Free Tier</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1">
+                <button onclick="toggleTheme()" class="text-gray-400 hover:text-blue-500 dark:text-gray-500 dark:hover:text-blue-400 transition-colors p-2 rounded-lg" title="Toggle Theme">
+                    <i id="theme-icon" class="ph ph-sun text-xl"></i>
+                </button>
+                <button onclick="logout()" class="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors p-2 rounded-lg" title="Log Out">
+                    <i class="ph ph-sign-out text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<main class="flex-1 bg-gray-50 dark:bg-gray-950 flex flex-col h-full overflow-y-auto relative transition-colors duration-200">
+
+    <div id="view-create-project" class="flex-1 flex flex-col items-center justify-center p-8">
+        <div class="w-16 h-16 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center mb-6 shadow-sm dark:shadow-lg transition-colors">
+            <i class="ph ph-folder-dashed text-3xl text-blue-500 dark:text-blue-400"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Create a New Workspace</h2>
+        <p class="text-gray-500 dark:text-gray-400 text-center max-w-md mb-8">Group your ML models, monitor drift, and manage compute resources all in one place.</p>
+
+        <form id="create-project-form" onsubmit="handleCreateProject(event)" class="w-full max-w-md space-y-4 bg-white dark:bg-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xl transition-colors">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project Name</label>
+                <input type="text" id="proj-name" required placeholder="e.g., Fraud Detection" class="w-full bg-gray-50 dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 text-gray-900 dark:text-white transition-colors">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (Optional)</label>
+                <textarea id="proj-desc" rows="2" placeholder="What models will live here?" class="w-full bg-gray-50 dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 text-gray-900 dark:text-white resize-none transition-colors"></textarea>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-lg mt-2 transition-colors shadow-sm">
+                Create Project
+            </button>
+            <div id="create-status" class="text-sm text-center mt-2 hidden"></div>
+        </form>
+    </div>
+
+    <div id="view-active-project" class="hidden flex-1 p-10 flex flex-col h-full">
+        <header class="flex justify-between items-end mb-8">
+            <div>
+                <p class="text-sm text-blue-600 dark:text-blue-400 font-bold tracking-wider mb-1 uppercase">Active Project</p>
+                <h2 id="active-proj-name" class="text-3xl font-bold text-gray-900 dark:text-white">Project Name</h2>
+                <p id="active-proj-desc" class="text-gray-500 dark:text-gray-400 mt-2">Project description goes here.</p>
+            </div>
+            <button class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-md shadow-emerald-500/20">
+                <i class="ph ph-upload-simple"></i> Deploy Model
+            </button>
+        </header>
+
+        <div class="grid grid-cols-3 gap-6 mb-8">
+            <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-xl shadow-sm transition-colors">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Active Models</p>
+                <p class="text-2xl font-bold text-gray-900 dark:text-white">0</p>
+            </div>
+            <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-xl shadow-sm transition-colors">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Predictions</p>
+                <p class="text-2xl font-bold text-gray-900 dark:text-white">0</p>
+            </div>
+            <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-xl shadow-sm border-l-4 border-l-emerald-500 transition-colors">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">System Status</p>
+                <p class="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1">No Drift Detected</p>
+            </div>
+        </div>
+
+        <div class="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden flex flex-col shadow-sm transition-colors">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 transition-colors">
+                <h3 class="font-semibold text-gray-800 dark:text-gray-200">Deployed Models</h3>
+            </div>
+            <div class="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400 dark:text-gray-500">
+                <i class="ph ph-cube text-4xl mb-3 opacity-50"></i>
+                <p>No models deployed yet.</p>
+                <p class="text-sm mt-1">Click 'Deploy Model' to upload your first `.pkl` file.</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    const html = document.documentElement;
+    const themeIcon = document.getElementById('theme-icon');
+
+    // Check local storage on load
+    if (localStorage.getItem('theme') === 'light') {
+        html.classList.remove('dark');
+        themeIcon.className = 'ph ph-moon text-xl';
+    } else {
+        html.classList.add('dark');
+        themeIcon.className = 'ph ph-sun text-xl';
+    }
+
+    function toggleTheme() {
+        if (html.classList.contains('dark')) {
+            html.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+            themeIcon.className = 'ph ph-moon text-xl';
+        } else {
+            html.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+            themeIcon.className = 'ph ph-sun text-xl';
+        }
+    }
+
+    // --- AUTH & STATE ---
+    const token = localStorage.getItem('driftguard_jwt');
+    if (!token) {
+        window.location.href = 'index.html';
+    }
+
+    const API_BASE = 'http://localhost:8080/api';
+    let currentProjectId = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchUserProfile(); // Fetch the email!
+        fetchProjects();
+    });
+
+    // --- NEW: Fetch User Profile ---
+    async function fetchUserProfile() {
+        try {
+            const response = await fetch(`${API_BASE}/me`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                // Update the UI with the real email
+                document.getElementById('user-email').innerText = data.email;
+
+                // Optional: Update the avatar letter to the first letter of their email
+                const avatarLetter = data.email.charAt(0).toUpperCase();
+                document.querySelector('.rounded-full.bg-gradient-to-tr').innerText = avatarLetter;
+            } else {
+                console.error("Failed to fetch profile data");
+            }
+        } catch (error) {
+            console.error("Network error fetching profile:", error);
+        }
+    }
+
+    function showCreateProjectView() {
+        currentProjectId = null;
+        document.getElementById('view-active-project').classList.add('hidden');
+        document.getElementById('view-create-project').classList.remove('hidden');
+
+        document.querySelectorAll('.project-item').forEach(el => {
+            el.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-blue-500');
+        });
+    }
+
+    function showActiveProjectView(project) {
+        currentProjectId = project.ID;
+        document.getElementById('view-create-project').classList.add('hidden');
+        document.getElementById('view-active-project').classList.remove('hidden');
+        document.getElementById('view-active-project').classList.add('flex');
+
+        document.getElementById('active-proj-name').innerText = project.name;
+        document.getElementById('active-proj-desc').innerText = project.description || 'No description provided.';
+
+        document.querySelectorAll('.project-item').forEach(el => {
+            el.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-blue-500');
+        });
+        const activeLi = document.getElementById(`proj-link-${project.ID}`);
+        if (activeLi) {
+            activeLi.classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-l-2', 'border-blue-500');
+        }
+    }
+
+    async function fetchProjects() {
+        const listEl = document.getElementById('project-list');
+
+        try {
+            const response = await fetch(`${API_BASE}/projects`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                renderProjectList(data.projects || []);
+            } else {
+                listEl.innerHTML = `<li class="text-red-500 dark:text-red-400 text-sm px-2">Failed to load projects</li>`;
+            }
+        } catch (error) {
+            listEl.innerHTML = `<li class="text-gray-500 text-sm px-2 italic">Backend offline.</li>`;
+        }
+    }
+
+    function renderProjectList(projects) {
+        const listEl = document.getElementById('project-list');
+        listEl.innerHTML = '';
+
+        if (projects.length === 0) {
+            listEl.innerHTML = `<li class="px-2 py-3 text-sm text-gray-500 text-center">No projects yet</li>`;
+            return;
+        }
+
+        projects.forEach(proj => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                    <button id="proj-link-${proj.ID}" onclick='showActiveProjectView(${JSON.stringify(proj)})'
+                            class="project-item w-full text-left px-3 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors flex items-center gap-3 text-sm font-medium border-l-2 border-transparent">
+                        <i class="ph-fill ph-folder text-gray-400 dark:text-gray-500"></i>
+                        <span class="truncate">${proj.name}</span>
+                    </button>
+                `;
+            listEl.appendChild(li);
+        });
+    }
+
+    async function handleCreateProject(event) {
+        event.preventDefault();
+        const name = document.getElementById('proj-name').value;
+        const desc = document.getElementById('proj-desc').value;
+        const statusDiv = document.getElementById('create-status');
+
+        statusDiv.classList.remove('hidden');
+        statusDiv.className = 'text-sm text-center mt-3 text-gray-500 dark:text-gray-400';
+        statusDiv.innerText = 'Creating...';
+
+        try {
+            const response = await fetch(`${API_BASE}/projects`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: name, description: desc })
+            });
+
+            if (response.ok) {
+                const newProject = await response.json();
+
+                document.getElementById('proj-name').value = '';
+                document.getElementById('proj-desc').value = '';
+                statusDiv.classList.add('hidden');
+
+                await fetchProjects();
+                showActiveProjectView(newProject);
+            } else {
+                const data = await response.json();
+                statusDiv.className = 'text-sm text-center mt-3 text-red-500 dark:text-red-400';
+                statusDiv.innerText = `Error: ${data.error || 'Could not create project'}`;
+            }
+        } catch (error) {
+            statusDiv.className = 'text-sm text-center mt-3 text-red-500 dark:text-red-400';
+            statusDiv.innerText = 'Network error. Is the backend running?';
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('driftguard_jwt');
+        window.location.href = 'index.html';
+    }
+</script>
+</body>
+</html>

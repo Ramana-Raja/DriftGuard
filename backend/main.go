@@ -4,11 +4,11 @@ import (
 	"DriftGuard/backend/controllers"
 	"DriftGuard/backend/database"
 	"DriftGuard/backend/middleware"
-	"log"
-	"os"
-
+	"DriftGuard/backend/models"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"log"
+	"os"
 )
 
 func main() {
@@ -42,7 +42,10 @@ func main() {
 	defer sqlDB.Close()
 
 	r := gin.Default()
-	r.Use(cors.Default())
+	r.Use(cors.New(cors.Config{
+		AllowAllOrigins: true,
+		AllowHeaders:    []string{"Authorization", "Content-Type"},
+	}))
 	r.POST("/api/register", controllers.Register)
 	r.POST("/api/login", controllers.Login)
 
@@ -50,7 +53,8 @@ func main() {
 
 	protected.Use(middleware.JwtHandler())
 	{
-
+		protected.GET("/me", models.Getemail)
+		protected.GET("/projects", models.GetProejcts)
 	}
 	r.Run(":8080")
 }
