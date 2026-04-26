@@ -5,6 +5,7 @@ import (
 	"DriftGuard/backend/database"
 	"DriftGuard/backend/middleware"
 	"DriftGuard/backend/models"
+	"DriftGuard/backend/storage"
 	"log"
 	"os"
 
@@ -35,6 +36,7 @@ func main() {
 	}
 
 	database.NewDB(host, port, user, password, dbname)
+	storage.InitMinIO()
 
 	sqlDB, err := database.DB.DB()
 	if err != nil {
@@ -58,6 +60,8 @@ func main() {
 		protected.GET("/projects", models.GetProejcts)
 		protected.POST("/projects", models.CreateProjects)
 
+		protected.GET("/projects/:id/model", models.GetProjectModel)
+		protected.POST("/projects/:id/model", models.UploadModel)
 	}
 	r.Run(":8080")
 }

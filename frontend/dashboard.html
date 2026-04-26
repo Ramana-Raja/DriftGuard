@@ -91,7 +91,7 @@
                 <h2 id="active-proj-name" class="text-3xl font-bold text-gray-900 dark:text-white">Project Name</h2>
                 <p id="active-proj-desc" class="text-gray-500 dark:text-gray-400 mt-2">Project description goes here.</p>
             </div>
-            <button class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-md shadow-emerald-500/20">
+            <button onclick="triggerUpload()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-md shadow-emerald-500/20">
                 <i class="ph ph-upload-simple"></i> Deploy Model
             </button>
         </header>
@@ -111,7 +111,7 @@
             </div>
         </div>
 
-        <div class="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden flex flex-col shadow-sm transition-colors">
+        <div id="model-container" class="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden flex flex-col shadow-sm transition-colors">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 transition-colors">
                 <h3 class="font-semibold text-gray-800 dark:text-gray-200">Deployed Models</h3>
             </div>
@@ -122,13 +122,13 @@
             </div>
         </div>
     </div>
+    <input type="file" id="model-upload" accept=".pkl" class="hidden" />
 </main>
-
 <script>
     const html = document.documentElement;
     const themeIcon = document.getElementById('theme-icon');
 
-    // Check local storage on load
+    // --- THEME ---
     if (localStorage.getItem('theme') === 'light') {
         html.classList.remove('dark');
         themeIcon.className = 'ph ph-moon text-xl';
@@ -149,90 +149,79 @@
         }
     }
 
-    // --- AUTH & STATE ---
+    // --- AUTH ---
     const token = localStorage.getItem('driftguard_jwt');
-    if (!token) {
-        window.location.href = 'index.html';
-    }
+    if (!token) window.location.href = 'index.html';
 
     const API_BASE = 'http://localhost:8080/api';
     let currentProjectId = null;
 
     document.addEventListener('DOMContentLoaded', () => {
-        fetchUserProfile(); // Fetch the email!
+        fetchUserProfile();
         fetchProjects();
+
+        // attach upload listener
+        const input = document.getElementById('model-upload');
+        if (input) {
+            input.addEventListener('change', uploadModel);
+        }
     });
 
-    // --- NEW: Fetch User Profile ---
+    // --- USER PROFILE ---
     async function fetchUserProfile() {
         try {
-            const response = await fetch(`${API_BASE}/me`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
+            const res = await fetch(`${API_BASE}/me`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                // Update the UI with the real email
+            if (res.ok) {
+                const data = await res.json();
                 document.getElementById('user-email').innerText = data.email;
-
-                // Optional: Update the avatar letter to the first letter of their email
-                const avatarLetter = data.email.charAt(0).toUpperCase();
-                document.querySelector('.rounded-full.bg-gradient-to-tr').innerText = avatarLetter;
-            } else {
-                console.error("Failed to fetch profile data");
+                document.querySelector('.rounded-full.bg-gradient-to-tr').innerText =
+                    data.email.charAt(0).toUpperCase();
             }
-        } catch (error) {
-            console.error("Network error fetching profile:", error);
+        } catch (err) {
+            console.error("Profile error:", err);
         }
     }
 
+    // --- VIEW SWITCH ---
     function showCreateProjectView() {
         currentProjectId = null;
         document.getElementById('view-active-project').classList.add('hidden');
         document.getElementById('view-create-project').classList.remove('hidden');
-
-        document.querySelectorAll('.project-item').forEach(el => {
-            el.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-blue-500');
-        });
     }
 
-    function showActiveProjectView(project) {
+    async function showActiveProjectView(project) {
         currentProjectId = project.ID;
 
         document.getElementById('view-create-project').classList.add('hidden');
         document.getElementById('view-active-project').classList.remove('hidden');
-        document.getElementById('view-active-project').classList.add('flex');
-        
+
         document.getElementById('active-proj-name').innerText = project.project_name;
-        document.getElementById('active-proj-desc').innerText = project.description || 'No description provided.';
+        document.getElementById('active-proj-desc').innerText =
+            project.description || 'No description provided.';
 
-        document.querySelectorAll('.project-item').forEach(el => {
-            el.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-blue-500');
-        });
-
-        const activeLi = document.getElementById(`proj-link-${project.ID}`);
-        if (activeLi) {
-            activeLi.classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-gray-900', 'dark:text-white', 'border-l-2', 'border-blue-500');
-        }
+        await fetchProjectModel(project.ID);
     }
 
+    // --- PROJECTS ---
     async function fetchProjects() {
         const listEl = document.getElementById('project-list');
 
         try {
-            const response = await fetch(`${API_BASE}/projects`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const res = await fetch(`${API_BASE}/projects`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
-            if (response.ok) {
-                const data = await response.json();
+            if (res.ok) {
+                const data = await res.json();
                 renderProjectList(data.projects || []);
             } else {
-                listEl.innerHTML = `<li class="text-red-500 dark:text-red-400 text-sm px-2">Failed to load projects</li>`;
+                listEl.innerHTML = `<li class="text-red-500">Failed to load</li>`;
             }
-        } catch (error) {
-            listEl.innerHTML = `<li class="text-gray-500 text-sm px-2 italic">Backend offline.</li>`;
+        } catch {
+            listEl.innerHTML = `<li class="text-gray-500">Backend offline</li>`;
         }
     }
 
@@ -240,67 +229,191 @@
         const listEl = document.getElementById('project-list');
         listEl.innerHTML = '';
 
-        if (projects.length === 0) {
-            listEl.innerHTML = `<li class="px-2 py-3 text-sm text-gray-500 text-center">No projects yet</li>`;
+        if (!projects.length) {
+            listEl.innerHTML = `<li class="text-gray-500">No projects</li>`;
             return;
         }
 
         projects.forEach(proj => {
             const li = document.createElement('li');
-
             li.innerHTML = `
-                <button id="proj-link-${proj.ID}" onclick='showActiveProjectView(${JSON.stringify(proj)})'
-                        class="project-item w-full text-left px-3 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors flex items-center gap-3 text-sm font-medium border-l-2 border-transparent">
-                    <i class="ph-fill ph-folder text-gray-400 dark:text-gray-500"></i>
-
-                    <span class="truncate">${proj.project_name}</span>
-                </button>
-            `;
-
+            <button onclick='showActiveProjectView(${JSON.stringify(proj)})'
+                class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md">
+                ${proj.project_name}
+            </button>`;
             listEl.appendChild(li);
         });
     }
 
-    async function handleCreateProject(event) {
-        event.preventDefault();
-        const name = document.getElementById('proj-name').value;
-        const desc = document.getElementById('proj-desc').value;
-        const statusDiv = document.getElementById('create-status');
-
-        statusDiv.classList.remove('hidden');
-        statusDiv.className = 'text-sm text-center mt-3 text-gray-500 dark:text-gray-400';
-        statusDiv.innerText = 'Creating...';
-
+    // --- FETCH MODEL ---
+    async function fetchProjectModel(projectId) {
         try {
-            const response = await fetch(`${API_BASE}/projects`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ name: name, description: desc })
+            const res = await fetch(`${API_BASE}/projects/${projectId}/model`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
-            if (response.ok) {
-                const newProject = await response.json();
+            if (!res.ok) return renderNoModel();
 
-                document.getElementById('proj-name').value = '';
-                document.getElementById('proj-desc').value = '';
-                statusDiv.classList.add('hidden');
+            const data = await res.json();
+            renderModel(data);
 
-                await fetchProjects();
-                showActiveProjectView(newProject);
-            } else {
-                const data = await response.json();
-                statusDiv.className = 'text-sm text-center mt-3 text-red-500 dark:text-red-400';
-                statusDiv.innerText = `Error: ${data.error || 'Could not create project'}`;
-            }
-        } catch (error) {
-            statusDiv.className = 'text-sm text-center mt-3 text-red-500 dark:text-red-400';
-            statusDiv.innerText = 'Network error. Is the backend running?';
+        } catch (err) {
+            console.error("Model error:", err);
+            renderNoModel();
         }
     }
 
+    // --- RENDER MODEL --
+
+function renderModel(data) {
+    const container = document.getElementById('model-container');
+
+    if (!data.active_model || !data.active_model.Version) {
+        return renderNoModel();
+    }
+
+    container.innerHTML = `
+    <div class="p-6 space-y-6">
+
+        <!-- Active Model Card -->
+        <div class="rounded-xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-400 shadow-lg">
+            <div class="bg-white dark:bg-gray-900 rounded-xl p-5 flex items-center justify-between transition-colors">
+
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                        Active Model
+                    </h3>
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                        v${data.active_model.Version}
+                    </p>
+                </div>
+
+                <!-- Status -->
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-emerald-600 dark:text-emerald-400 text-sm font-medium">
+                            Active
+                        </span>
+                </div>
+
+            </div>
+        </div>
+
+    <!-- Version History -->
+    <div>
+        <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide">
+            Version History
+        </h4>
+
+        <div class="space-y-2">
+            ${data.history.map(v => `
+                        <div class="
+                            flex justify-between items-center
+                            px-4 py-3 rounded-lg
+                            border border-gray-200 dark:border-gray-800
+                            bg-white dark:bg-gray-900
+                            hover:border-purple-500
+                            transition
+                        ">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">
+                                Version ${v.Version}
+                            </span>
+
+                            ${
+            v.IsActive
+                ? `<span class="text-emerald-600 dark:text-emerald-400 text-xs font-medium flex items-center gap-1">
+                                        ● Active
+                                   </span>`
+                : `<span class="text-gray-400 dark:text-gray-500 text-xs">
+                                        Inactive
+                                   </span>`
+        }
+                        </div>
+                    `).join('')}
+        </div>
+    </div>
+
+    </div>
+    `;
+}
+
+
+
+    // --- EMPTY ---
+    function renderNoModel() {
+        const container = document.getElementById('model-container');
+
+        container.innerHTML = `
+        <div class="flex flex-col items-center justify-center p-8 text-gray-400">
+            <p>No models deployed yet.</p>
+            <p class="text-sm">Upload your first .pkl file</p>
+        </div>
+    `;
+    }
+
+    // --- UPLOAD ---
+    function triggerUpload() {
+        document.getElementById('model-upload').click();
+    }
+
+    async function uploadModel(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (!currentProjectId) {
+            alert("Select a project first");
+            return;
+        }
+        if (!file.name.endsWith(".pkl")) {
+            alert("Only .pkl files allowed");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("model", file);
+
+        try {
+            const res = await fetch(`${API_BASE}/projects/${currentProjectId}/model`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData
+            });
+
+            if (res.ok) {
+                alert("Model uploaded");
+                await fetchProjectModel(currentProjectId);
+            } else {
+                alert("Upload failed");
+            }
+        } catch (err) {
+            console.error("Upload error:", err);
+        }
+        event.target.value = "";
+    }
+
+    // --- CREATE PROJECT ---
+    async function handleCreateProject(event) {
+        event.preventDefault();
+
+        const name = document.getElementById('proj-name').value;
+        const desc = document.getElementById('proj-desc').value;
+
+        const res = await fetch(`${API_BASE}/projects`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ name, description: desc })
+        });
+
+        if (res.ok) {
+            const project = await res.json();
+            fetchProjects();
+            showActiveProjectView(project);
+        }
+    }
+
+    // --- LOGOUT ---
     function logout() {
         localStorage.removeItem('driftguard_jwt');
         window.location.href = 'index.html';

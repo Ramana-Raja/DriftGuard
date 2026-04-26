@@ -24,6 +24,7 @@ func NewDB(host, port, user, password, dbname string) {
 		&UserProfile{},
 		&Project{},
 		&Model{},
+		ModelVersion{},
 	)
 
 	if err != nil {

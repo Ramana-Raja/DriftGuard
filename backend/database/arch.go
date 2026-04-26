@@ -23,13 +23,23 @@ type Project struct {
 	ProjectName   string `json:"project_name"`
 	Description   string `json:"description"`
 
-	Models []Model `json:"models"`
+	ProjectModel Model `gorm:"foreignKey:ProjectID"`
 }
 
 type Model struct {
 	gorm.Model
-	ProjectID   uint   `json:"project_id"`
-	Name        string `json:"name"`
-	StoragePath string `json:"storage_path"`
-	Framework   string `json:"framework"`
+	ProjectID uint
+
+	Name string
+
+	Versions []ModelVersion
+}
+
+type ModelVersion struct {
+	gorm.Model
+	ModelID uint
+
+	Version  int
+	FilePath string
+	IsActive bool
 }
