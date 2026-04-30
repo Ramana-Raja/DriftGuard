@@ -6,6 +6,7 @@ import (
 	"DriftGuard/backend/middleware"
 	"DriftGuard/backend/models"
 	"DriftGuard/backend/storage"
+	"DriftGuard/backend/tasks"
 	"log"
 	"os"
 
@@ -37,7 +38,9 @@ func main() {
 
 	database.NewDB(host, port, user, password, dbname)
 	storage.InitMinIO()
+	tasks.RedisInt()
 
+	go tasks.StartDriftCheck()
 	sqlDB, err := database.DB.DB()
 	if err != nil {
 		log.Fatal(err)
