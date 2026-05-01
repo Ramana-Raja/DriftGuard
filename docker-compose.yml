@@ -3,10 +3,39 @@ version: "3.9"
 services:
   redis:
     image: redis:7
+    container_name: redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+      - "9101:9101"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: supersecret
+    command: server /data --address ":9100" --console-address ":9101"
+    volumes:
+      - minio_data:/data
 
   worker:
     build: ./worker
+    container_name: worker
+    restart: unless-stopped
     depends_on:
       - redis
+      - minio
+    environment:
+      MINIO_ENDPOINT: minio:9100
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: supersecret
+
+volumes:
+  redis_data:
+  minio_data:

@@ -6,7 +6,7 @@ import (
 )
 
 func StartDriftCheck() {
-	ticker := time.NewTicker(10 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {

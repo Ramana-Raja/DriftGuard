@@ -4,7 +4,7 @@ import time
 import os
 import pickle
 from minio import Minio
-
+from io import BytesIO
 
 QUEUE_NAME = "drift_check_queue"
 
@@ -35,12 +35,43 @@ def download_model(storage_path):
     bucket = "models"
 
     local_path = f"/tmp/{storage_path.split('/')[-1]}"
-    client.fget_object(bucket, storage_path, local_path)
 
-    print(f"MINIO- downloaded {storage_path}")
-    return local_path
+    try:
+        client.fget_object(bucket, storage_path, local_path)
+        print(f"MINIO - downloaded {storage_path}")
+        return local_path
 
+    except S3Error as e:
+        if e.code == "NoSuchKey":
+            print(f"[WARN] File not found in MinIO: {storage_path}")
+            return None
+        else:
+            print(f"[ERROR] MinIO error: {e}")
+            return None
 
+    except Exception as e:
+        print(f"[ERROR] Unexpected error downloading {storage_path}: {e}")
+        return None
+
+def upload_model(original_path, model_obj):
+    client = get_minio_client()
+    bucket = "models"
+
+    buffer = BytesIO()
+    pickle.dump(model_obj, buffer)
+    buffer.seek(0)
+
+    client.put_object(
+        bucket,
+        original_path,
+        buffer,
+        length=buffer.getbuffer().nbytes,
+        content_type="application/octet-stream"
+    )
+
+    print(f"MINIO - uploaded new version: {new_object_name}")
+
+    return new_object_name
 def load_model(path):
     with open(path, "rb") as f:
         return pickle.load(f)
@@ -49,13 +80,19 @@ def load_model(path):
 def process_task(task):
     storage_path = task["storage_path"]
 
-
     local_file = download_model(storage_path)
 
-    model = load_model(local_file)
+    if not local_file:
+        print("Skipping task - file not available")
+        return
 
-    print("model loaded successfully")
+    try:
+        model = load_model(local_file)
+        print("model loaded successfully")
+    except Exception as e:
+        print(f"[ERROR] Failed to load model: {e}")
 
+    upload_model(storage_path,model)
 
 def main():
     r = connect_redis()

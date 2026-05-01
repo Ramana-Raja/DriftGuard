@@ -35,8 +35,8 @@ func main() {
 	if dbname == "" {
 		dbname = "myapp"
 	}
-
 	database.NewDB(host, port, user, password, dbname)
+	//database.ResetDB()
 	storage.InitMinIO()
 	tasks.RedisInt()
 

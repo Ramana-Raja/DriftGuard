@@ -15,7 +15,7 @@ func InitMinIO() {
 	var err error
 
 	Client, err = minio.New("localhost:9100", &minio.Options{
-		Creds:  credentials.NewStaticV4("admin", "password", ""),
+		Creds:  credentials.NewStaticV4("admin", "supersecret", ""),
 		Secure: false,
 	})
 
