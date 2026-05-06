@@ -37,9 +37,9 @@ type Model struct {
 
 type ModelVersion struct {
 	gorm.Model
-	ModelID uint
-
-	Version  int
-	FilePath string
-	IsActive bool
+	ModelID     uint
+	DatasetLink string
+	Version     int
+	FilePath    string
+	IsActive    bool
 }

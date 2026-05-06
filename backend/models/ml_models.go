@@ -50,6 +50,12 @@ func GetProjectModel(c *gin.Context) {
 
 func UploadModel(c *gin.Context) {
 	userID := c.MustGet("currentUser").(uint)
+	datasetLink := c.PostForm("dataset_link")
+
+	if datasetLink == "" {
+		c.JSON(400, gin.H{"error": "need dataset link"})
+		return
+	}
 
 	projectIDParam := c.Param("id")
 	projectID, err := strconv.Atoi(projectIDParam)
@@ -138,10 +144,11 @@ func UploadModel(c *gin.Context) {
 		return
 	}
 	version := database.ModelVersion{
-		ModelID:  model.ID,
-		Version:  newVersion,
-		FilePath: path,
-		IsActive: true,
+		ModelID:     model.ID,
+		Version:     newVersion,
+		FilePath:    path,
+		DatasetLink: datasetLink,
+		IsActive:    true,
 	}
 
 	if err := database.DB.Create(&version).Error; err != nil {
