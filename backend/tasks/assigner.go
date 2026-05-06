@@ -6,10 +6,11 @@ import (
 )
 
 func AllActive() {
-	var results []string
+	var results []database.ModelVersion
 
 	err := database.DB.
-		Model(&database.ModelVersion{}).Where("is_active = ?", true).Pluck("file_path", &results).Error
+		Where("is_active = ?", true).
+		Find(&results).Error
 
 	if err != nil {
 		log.Println("failed to fetch active models:", err)
@@ -18,7 +19,8 @@ func AllActive() {
 
 	for _, r := range results {
 		err := DispatchDriftTask(
-			r,
+			r.FilePath,
+			r.DatasetLink,
 		)
 		if err != nil {
 			log.Println("failed to dispatch task:", err)

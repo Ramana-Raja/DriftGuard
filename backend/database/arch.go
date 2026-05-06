@@ -38,8 +38,9 @@ type Model struct {
 type ModelVersion struct {
 	gorm.Model
 	ModelID     uint
-	DatasetLink string
+	DatasetLink string //holds the latest dataset from the source
 	Version     int
 	FilePath    string
 	IsActive    bool
+	DatasetPath string //holds the current dataset
 }

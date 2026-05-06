@@ -1,3 +1,4 @@
 redis
 minio
 scikit-learn
+pandas

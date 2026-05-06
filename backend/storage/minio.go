@@ -2,8 +2,8 @@ package storage
 
 import (
 	"context"
+	"io"
 	"log"
-	"mime/multipart"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -24,7 +24,7 @@ func InitMinIO() {
 	}
 }
 
-func UploadFile(bucket, objectName string, file multipart.File, size int64) (string, error) {
+func UploadFile(bucket, objectName string, file io.Reader, size int64) (string, error) {
 	ctx := context.Background()
 
 	_, err := Client.PutObject(ctx, bucket, objectName, file, size, minio.PutObjectOptions{

@@ -3,15 +3,15 @@ package models
 import (
 	"DriftGuard/backend/database"
 	"DriftGuard/backend/storage"
+	"bytes"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
-
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
 )
 
 func GetProjectModel(c *gin.Context) {
@@ -143,11 +143,49 @@ func UploadModel(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "failed to update versions"})
 		return
 	}
+
+	datasetObjectName := fmt.Sprintf(
+		"project-%d/model-%d/v%d.csv",
+		project.ID,
+		model.ID,
+		newVersion,
+	)
+
+	resp, err := http.Get(datasetLink)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to download dataset"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(400, gin.H{"error": "invalid dataset link"})
+		return
+	}
+
+	datasetBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to read dataset"})
+		return
+	}
+	datasetPath, err := storage.UploadFile(
+		"datasets",
+		datasetObjectName,
+		bytes.NewReader(datasetBytes),
+		int64(len(datasetBytes)),
+	)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to upload dataset"})
+		return
+	}
+
 	version := database.ModelVersion{
 		ModelID:     model.ID,
 		Version:     newVersion,
 		FilePath:    path,
-		DatasetLink: datasetLink,
+		DatasetLink: datasetPath,
+		DatasetPath: datasetLink,
 		IsActive:    true,
 	}
 
