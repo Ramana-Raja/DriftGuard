@@ -44,8 +44,8 @@ func main() {
 		dbname = "myapp"
 	}
 	database.NewDB(host, port, user, password, dbname)
-	database.ResetDB()
-	storage.InitMinIO()
+	//database.ResetDB()
+	storage.InitBlobStorage()
 	tasks.RedisInt()
 
 	go prometheus.StartPro()
@@ -57,10 +57,26 @@ func main() {
 	defer sqlDB.Close()
 
 	r := gin.Default()
+
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins: true,
 		AllowHeaders:    []string{"Authorization", "Content-Type"},
 	}))
+
+	r.LoadHTMLGlob("frontend/*")
+
+	r.GET("/", func(c *gin.Context) {
+		c.Redirect(302, "/login")
+	})
+
+	r.GET("/login", func(c *gin.Context) {
+		c.HTML(200, "login.html", nil)
+	})
+
+	r.GET("/dashboard", func(c *gin.Context) {
+		c.HTML(200, "dashboard.html", nil)
+	})
+
 	r.POST("/api/register", controllers.Register)
 	r.POST("/api/login", controllers.Login)
 

@@ -1,5 +1,5 @@
 redis
-minio
 scikit-learn==1.6.1
 pandas
 joblib
+azure-storage-blob

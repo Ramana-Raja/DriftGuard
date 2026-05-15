@@ -2,11 +2,9 @@ package models
 
 import (
 	"DriftGuard/backend/database"
-	"strconv"
-
-	"DriftGuard/backend/graf"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 func GetProejcts(c *gin.Context) {
@@ -55,16 +53,11 @@ func CreateProjects(c *gin.Context) {
 		ProjectName:   project.Name,
 		Description:   project.Description,
 	}
-	if err := database.DB.Create(&input).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed"})
-		return
-	}
-	err = graf.ProvisionWorkspace(strconv.Itoa(int(input.ID)), project.Name)
 
-	if err != nil {
-		database.DB.Unscoped().Delete(&project)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed creating grafana id"})
+	if err := database.DB.Create(&input).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create project"})
 		return
 	}
+
 	c.JSON(http.StatusOK, input)
 }

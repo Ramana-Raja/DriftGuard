@@ -183,7 +183,7 @@
     const token = localStorage.getItem('driftguard_jwt');
     if (!token) window.location.href = 'index.html';
 
-    const API_BASE = 'http://localhost:8080/api';
+    const API_BASE = '/api';
     let currentProjectId = null;
 
     document.addEventListener('DOMContentLoaded', () => {

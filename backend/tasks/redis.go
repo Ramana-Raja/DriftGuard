@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -20,8 +21,14 @@ type DriftTask struct {
 }
 
 func RedisInt() {
+
+	host := os.Getenv("REDIS_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+
 	RedisClient = redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
+		Addr:     host + ":6379",
 		Password: "",
 		DB:       0,
 	})
@@ -29,6 +36,7 @@ func RedisInt() {
 	if err != nil {
 		log.Fatalf("could not connect to Redis: %v", err)
 	}
+
 	fmt.Println("connected to Redis")
 }
 

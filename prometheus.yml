@@ -4,6 +4,5 @@ global:
 scrape_configs:
   - job_name: 'driftguard-backend'
     static_configs:
-      # 'api' should match the service name in your docker-compose
-      # 8080 is the port where your Gin server exposes /metrics
+
       - targets: ['api:8080']

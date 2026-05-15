@@ -3,7 +3,6 @@ import json
 import time
 import os
 import pickle
-from minio import Minio, S3Error
 from io import BytesIO
 import pandas as pd
 import re
@@ -14,6 +13,8 @@ import shutil
 import traceback
 import joblib
 import numpy as np
+from azure.storage.blob import BlobServiceClient
+
 
 RESULTS_QUEUE = "results_queue"
 QUEUE_NAME = "drift_check_queue"
@@ -22,7 +23,11 @@ QUEUE_NAME = "drift_check_queue"
 def connect_redis():
     while True:
         try:
-            r = redis.Redis(host="redis", port=6379, db=0)
+            r = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=6379,
+                db=0
+            )
             r.ping()
             print("connected to Redis")
             return r
@@ -31,44 +36,60 @@ def connect_redis():
             time.sleep(2)
 
 
-def get_minio_client():
-    return Minio(
-        os.getenv("MINIO_ENDPOINT"),
-        access_key=os.getenv("MINIO_ACCESS_KEY"),
-        secret_key=os.getenv("MINIO_SECRET_KEY"),
-        secure=False
+def get_blob_service_client():
+    account = os.getenv("AZURE_STORAGE_ACCOUNT")
+    key = os.getenv("AZURE_STORAGE_KEY")
+
+    connection_string = (
+        f"DefaultEndpointsProtocol=https;"
+        f"AccountName={account};"
+        f"AccountKey={key};"
+        f"EndpointSuffix=core.windows.net"
     )
 
+    return BlobServiceClient.from_connection_string(
+        connection_string
+    )
 
-def download_data_from_bucket(storage_path,type):
-    client = get_minio_client()
-    bucket = type
-    os.makedirs(f"/tmp/{bucket}", exist_ok=True)
+def download_data_from_bucket(storage_path, container_name):
+    client = get_blob_service_client()
 
-    local_path = f"/tmp/{bucket}/{storage_path.split('/')[-1]}"
+    if "blob.core.windows.net" in storage_path:
+        search_str = f"/{container_name}/"
+        if search_str in storage_path:
+            storage_path = storage_path.split(search_str)[-1]
+
+    print(f"DEBUG: Cleaned blob path for Azure request: {storage_path}")
+
+    blob_client = client.get_blob_client(
+        container=container_name,
+        blob=storage_path
+    )
+
+    os.makedirs(f"/tmp/{container_name}", exist_ok=True)
+    local_path = f"/tmp/{container_name}/{storage_path.split('/')[-1]}"
 
     try:
-        client.fget_object(bucket, storage_path, local_path)
-        print(f"MINIO - downloaded {storage_path}")
+        with open(local_path, "wb") as file:
+            download_stream = blob_client.download_blob()
+            file.write(download_stream.readall())
+
+        print(f"AZURE BLOB - downloaded {storage_path}")
         return local_path
 
-    except S3Error as e:
-        if e.code == "NoSuchKey":
-            print(f"[WARN] File not found in MinIO: {storage_path}")
-            return None
-        else:
-            print(f"[ERROR] MinIO error: {e}")
-            return None
-
     except Exception as e:
-        print(f"[ERROR] Unexpected error downloading {storage_path}: {e}")
-        return None
+        print(f"[ERROR] Blob download failed for path '{storage_path}': {e}")
+        raise e
 
+def upload_bucket(model_path, model_obj, container_name):
+    client = get_blob_service_client()
 
-def upload_bucket(model_path, model_obj, bucket):
+    if "blob.core.windows.net" in model_path:
+        search_str = f"/{container_name}/"
+        if search_str in model_path:
+            model_path = model_path.split(search_str)[-1]
 
-    client = get_minio_client()
-
+    print(f"DEBUG: Cleaned base path for versioning: {model_path}")
 
     match = re.search(
         r"v(\d+)\.(pkl|csv)$",
@@ -76,16 +97,14 @@ def upload_bucket(model_path, model_obj, bucket):
     )
 
     if not match:
-        raise ValueError(
-            "invalid file path format"
-        )
+        raise ValueError(f"Invalid file path format for versioning: {model_path}")
 
     current_version = int(match.group(1))
     new_version = current_version + 1
 
     extension = (
         "pkl"
-        if bucket == "models"
+        if container_name == "models"
         else "csv"
     )
 
@@ -97,48 +116,28 @@ def upload_bucket(model_path, model_obj, bucket):
 
     buffer = BytesIO()
 
-    if bucket == "models":
-
+    if container_name == "models":
         pickle.dump(model_obj, buffer)
-
-        content_type = (
-            "application/octet-stream"
-        )
-
     else:
-        if not isinstance(
-            model_obj,
-            pd.DataFrame
-        ):
-            raise ValueError(
-                "For non-model buckets, "
-                "model_obj must be a pandas DataFrame"
-            )
-
-        csv_bytes = model_obj.to_csv(
-            index=False
-        ).encode("utf-8")
-
+        csv_bytes = model_obj.to_csv(index=False).encode("utf-8")
         buffer.write(csv_bytes)
-
-        content_type = "text/csv"
 
     buffer.seek(0)
 
-    client.put_object(
-        bucket_name=bucket,
-        object_name=new_model_path,
-        data=buffer,
-        length=buffer.getbuffer().nbytes,
-        content_type=content_type,
+    blob_client = client.get_blob_client(
+        container=container_name,
+        blob=new_model_path
     )
 
-    print(
-        f"MINIO - uploaded new version: "
-        f"{new_model_path}"
+    blob_client.upload_blob(
+        buffer,
+        overwrite=True
     )
 
-    return new_model_path
+    print(f"AZURE BLOB - successfully uploaded version update: {new_model_path}")
+
+    account = os.getenv("AZURE_STORAGE_ACCOUNT")
+    return f"https://{account}.blob.core.windows.net/{container_name}/{new_model_path}"
 
 def load_model(path):
     try:

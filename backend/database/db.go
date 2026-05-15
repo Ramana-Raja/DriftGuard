@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -34,7 +35,7 @@ func ResetDB() {
 	}
 }
 func NewDB(host, port, user, password, dbname string) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
 		host, port, user, password, dbname)
 
 	conn, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -47,7 +48,7 @@ func NewDB(host, port, user, password, dbname string) {
 		&UserProfile{},
 		&Project{},
 		&Model{},
-		ModelVersion{},
+		&ModelVersion{},
 	)
 
 	if err != nil {
@@ -55,4 +56,14 @@ func NewDB(host, port, user, password, dbname string) {
 	}
 	log.Println("Connection successful to database")
 	DB = conn
+
+	sqlDB, err := conn.DB()
+	if err == nil {
+		sqlDB.SetMaxIdleConns(20)
+		sqlDB.SetMaxOpenConns(40)
+		sqlDB.SetConnMaxLifetime(time.Minute * 5)
+		log.Println("Database connection pooling optimized for Azure PostgreSQL limits.")
+	} else {
+		log.Printf("Warning: Failed to retrieve generic SQL driver block for pooling settings: %v", err)
+	}
 }

@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y ca-certificates
 WORKDIR /app
 
 COPY --from=builder /app/driftguard .
-
+COPY --from=builder /app/backend/frontend ./frontend
 EXPOSE 8080
 
 CMD ["./driftguard"]

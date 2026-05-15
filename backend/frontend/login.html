@@ -120,7 +120,6 @@
 
         const payload = { email: email, password: password };
         const endpoint = currentMode === 'signup' ? '/api/register' : '/api/login';
-        const apiUrl = `http://localhost:8080${endpoint}`;
 
         try {
             // Show connecting status
@@ -128,7 +127,7 @@
             statusDiv.classList.add('text-gray-500', 'dark:text-gray-400');
             statusDiv.innerText = `Connecting...`;
 
-            const response = await fetch(apiUrl, {
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -148,7 +147,7 @@
 
                 // 2. Redirect to the Dashboard
                 setTimeout(() => {
-                    window.location.href = 'dashboard.html';
+                    window.location.href = '/dashboard';
                 }, 500); // 500ms delay just so the user sees the "Success" text
 
             } else {

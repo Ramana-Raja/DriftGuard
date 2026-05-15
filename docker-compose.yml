@@ -4,18 +4,24 @@ services:
   api:
     build: .
     container_name: api
+    restart: unless-stopped
     ports:
       - "8080:8080"
+    depends_on:
+      - redis
+      - prometheus
     networks:
       - driftguard-net
-    depends_on:
-      - postgres
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: myuser
-      DB_PASSWORD: mypassword
-      DB_NAME: myapp
+      DB_HOST: ""
+      DB_PORT: "5432"
+      DB_USER: ""
+      DB_PASSWORD: ""
+      DB_NAME: ""
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      AZURE_STORAGE_ACCOUNT: ""
+      AZURE_STORAGE_KEY: ""
 
   redis:
     image: redis:7
@@ -28,73 +34,53 @@ services:
     networks:
       - driftguard-net
 
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    restart: unless-stopped
-    ports:
-      - "9100:9100"
-      - "9101:9101"
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: supersecret
-    command: server /data --address ":9100" --console-address ":9101"
-    volumes:
-      - minio_data:/data
-    networks:
-      - driftguard-net
-
   worker:
     build: ./worker
     container_name: worker
     restart: unless-stopped
     depends_on:
       - redis
-      - minio
     environment:
-      MINIO_ENDPOINT: minio:9100
-      MINIO_ACCESS_KEY: admin
-      MINIO_SECRET_KEY: supersecret
-    networks:
-      - driftguard-net
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    networks:
-      - driftguard-net
-  postgres:
-    image: postgres:16
-    container_name: postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: myapp
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      AZURE_STORAGE_ACCOUNT: ""
+      AZURE_STORAGE_KEY: ""
+      DB_HOST: ""
+      DB_PORT: "5432"
+      DB_USER: ""
+      DB_PASSWORD: ""
+      DB_NAME: ""
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     networks:
       - driftguard-net
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.45.0
     container_name: prometheus
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: unless-stopped
     ports:
       - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
     networks:
       - driftguard-net
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - driftguard-net
+
 volumes:
   redis_data:
-  minio_data:
-  postgres_data:
+  prometheus_data:
+  grafana_data:
+
 networks:
   driftguard-net:
     driver: bridge
