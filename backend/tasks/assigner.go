@@ -21,6 +21,8 @@ func AllActive() {
 		err := DispatchDriftTask(
 			r.FilePath,
 			r.DatasetLink,
+			r.DatasetPath,
+			int(r.ProjectId),
 		)
 		if err != nil {
 			log.Println("failed to dispatch task:", err)

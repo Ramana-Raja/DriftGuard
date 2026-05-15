@@ -5,6 +5,7 @@ import (
 	"DriftGuard/backend/database"
 	"DriftGuard/backend/middleware"
 	"DriftGuard/backend/models"
+	"DriftGuard/backend/prometheus"
 	"DriftGuard/backend/storage"
 	"DriftGuard/backend/tasks"
 	"log"
@@ -12,8 +13,15 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+func prometheusHandler() gin.HandlerFunc {
+	h := promhttp.Handler()
+	return func(c *gin.Context) {
+		h.ServeHTTP(c.Writer, c.Request)
+	}
+}
 func main() {
 	host := os.Getenv("DB_HOST")
 	if host == "" {
@@ -36,10 +44,11 @@ func main() {
 		dbname = "myapp"
 	}
 	database.NewDB(host, port, user, password, dbname)
-	//database.ResetDB()
+	database.ResetDB()
 	storage.InitMinIO()
 	tasks.RedisInt()
 
+	go prometheus.StartPro()
 	go tasks.StartDriftCheck()
 	sqlDB, err := database.DB.DB()
 	if err != nil {
@@ -66,5 +75,6 @@ func main() {
 		protected.GET("/projects/:id/model", models.GetProjectModel)
 		protected.POST("/projects/:id/model", models.UploadModel)
 	}
+	r.GET("/metrics", prometheusHandler())
 	r.Run(":8080")
 }

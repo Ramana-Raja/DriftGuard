@@ -6,12 +6,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetProjectModel(c *gin.Context) {
@@ -182,10 +183,11 @@ func UploadModel(c *gin.Context) {
 
 	version := database.ModelVersion{
 		ModelID:     model.ID,
+		ProjectId:   project.ID,
 		Version:     newVersion,
 		FilePath:    path,
-		DatasetLink: datasetPath,
-		DatasetPath: datasetLink,
+		DatasetLink: datasetLink,
+		DatasetPath: datasetPath,
 		IsActive:    true,
 	}
 

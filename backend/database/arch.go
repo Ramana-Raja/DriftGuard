@@ -38,6 +38,7 @@ type Model struct {
 type ModelVersion struct {
 	gorm.Model
 	ModelID     uint
+	ProjectId   uint
 	DatasetLink string //holds the latest dataset from the source
 	Version     int
 	FilePath    string

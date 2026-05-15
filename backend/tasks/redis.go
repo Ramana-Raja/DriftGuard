@@ -15,11 +15,13 @@ var RedisClient *redis.Client
 type DriftTask struct {
 	StoragePath string `json:"storage_path"`
 	DatasetLink string `json:"dataset_link"`
+	DatasetPath string `json:"dataset_path"`
+	ProjectId   int    `json:"project_id"`
 }
 
 func RedisInt() {
 	RedisClient = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     "redis:6379",
 		Password: "",
 		DB:       0,
 	})
@@ -30,10 +32,12 @@ func RedisInt() {
 	fmt.Println("connected to Redis")
 }
 
-func DispatchDriftTask(storagePath string, datasetlink string) error {
+func DispatchDriftTask(storagePath string, datasetlink string, datasetpath string, projectid int) error {
 	task := DriftTask{
 		StoragePath: storagePath,
 		DatasetLink: datasetlink,
+		DatasetPath: datasetpath,
+		ProjectId:   projectid,
 	}
 
 	taskJSON, err := json.Marshal(task)
