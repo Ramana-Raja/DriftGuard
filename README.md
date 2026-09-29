@@ -62,51 +62,51 @@ In production machine learning systems, model decay is silent and inevitable. As
 ```mermaid
 flowchart TD
     subgraph Clients["Clients & Producers"]
-        UI["Web Dashboard (Tailwind CSS)"]
-        CLI["API Clients / Load Tests (k6)"]
+        UI["Web Dashboard"]
+        CLI["API Clients / Load Tests"]
     end
 
-    subgraph CoreBackend["DriftGuard Backend (Go 1.25 / Gin)"]
-        API["HTTP API Server (:8080)"]
+    subgraph CoreBackend["DriftGuard Backend (Go / Gin)"]
+        API["HTTP API Server - Port 8080"]
         JWT["JWT Auth & Security"]
-        CRON["Drift Routine Scheduler\n(1-Minute Interval)"]
-        PromHandler["Prometheus Metrics Handler\n(/metrics)"]
+        CRON["Drift Routine Scheduler - 1-Min Interval"]
+        PromHandler["Prometheus Metrics Handler"]
     end
 
     subgraph DataQueue["Message Broker & Database"]
-        PG[("PostgreSQL\n(Projects, Models, Versions)")]
-        RedisQueue[("Redis 7 Task Broker\nqueue: drift_check_queue\nqueue: results_queue")]
+        PG[("PostgreSQL Database - Metadata & Lineage")]
+        RedisQueue[("Redis 7 Task Broker - Queues")]
     end
 
     subgraph CloudStorage["Cloud Object Storage"]
-        AzureBlob[("Azure Blob Storage\ncontainers: /models, /datasets")]
+        AzureBlob[("Azure Blob Storage - Models & Datasets")]
     end
 
-    subgraph WorkerFleet["DriftGuard Worker Fleet (Python 3.11)"]
-        Worker["Worker Process (BRPOP)"]
-        DriftEngine["Drift Detection Suite\n(KS-Test, PSI, Wasserstein, Chi2, Corr)"]
-        Trainer["Retraining & Evaluation Engine\n(Scikit-Learn / Joblib)"]
+    subgraph WorkerFleet["DriftGuard Worker Fleet (Python)"]
+        Worker["Worker Process - BRPOP"]
+        DriftEngine["Statistical Drift Detection Engine"]
+        Trainer["Retraining & Evaluation Engine"]
     end
 
     subgraph Observability["Observability Suite"]
-        Prom["Prometheus (:9090)"]
-        Graf["Grafana Dashboard (:3000)"]
+        Prom["Prometheus Server - Port 9090"]
+        Graf["Grafana Dashboard - Port 3000"]
     end
 
-    UI -->|REST / Multipart| API
-    CLI -->|REST / Multipart| API
+    UI -->|"REST / Multipart"| API
+    CLI -->|"REST / Multipart"| API
     API --> JWT
     API --> PG
-    CRON -->|Query Active Models| PG
-    CRON -->|Dispatch Task| RedisQueue
-    API -->|Persist Artifacts| AzureBlob
+    CRON -->|"Query Active Models"| PG
+    CRON -->|"Dispatch Task"| RedisQueue
+    API -->|"Persist Artifacts"| AzureBlob
 
-    RedisQueue -->|Pop Task| Worker
+    RedisQueue -->|"Pop Task"| Worker
     Worker --> DriftEngine
-    DriftEngine -->|Baseline & Current Data| AzureBlob
-    DriftEngine -->|Drift Confirmed| Trainer
-    Trainer -->|Upload v(N+1) Artifacts| AzureBlob
-    Worker -->|Push Status| RedisQueue
+    DriftEngine -->|"Fetch Baseline & Live Data"| AzureBlob
+    DriftEngine -->|"Drift Confirmed"| Trainer
+    Trainer -->|"Upload Retrained Model & Dataset"| AzureBlob
+    Worker -->|"Push Status"| RedisQueue
 
     PromHandler --> Prom
     Prom --> Graf
