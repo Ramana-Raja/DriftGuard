@@ -2,16 +2,21 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
 
 var ctx = context.Background()
 var RedisClient *redis.Client
+
+const (
+	StreamName = "drift_check_stream"
+	GroupName  = "drift_workers"
+)
 
 type DriftTask struct {
 	StoragePath string `json:"storage_path"`
@@ -38,25 +43,41 @@ func RedisInt() {
 	}
 
 	fmt.Println("connected to Redis")
+
+	// Ensure the stream and consumer group exist for the ACK-based architecture
+	err = RedisClient.XGroupCreateMkStream(ctx, StreamName, GroupName, "$").Err()
+	if err != nil {
+		// Ignore if the consumer group already exists (BUSYGROUP)
+		if strings.Contains(err.Error(), "BUSYGROUP") {
+			log.Printf("Redis consumer group '%s' already initialized on stream '%s'", GroupName, StreamName)
+		} else {
+			log.Printf("Warning: failed to initialize consumer group: %v", err)
+		}
+	} else {
+		log.Printf("Initialized Redis stream '%s' and consumer group '%s'", StreamName, GroupName)
+	}
 }
 
 func DispatchDriftTask(storagePath string, datasetlink string, datasetpath string, projectid int) error {
-	task := DriftTask{
-		StoragePath: storagePath,
-		DatasetLink: datasetlink,
-		DatasetPath: datasetpath,
-		ProjectId:   projectid,
+	taskValues := map[string]interface{}{
+		"storage_path": storagePath,
+		"dataset_link": datasetlink,
+		"dataset_path": datasetpath,
+		"project_id":   projectid,
 	}
 
-	taskJSON, err := json.Marshal(task)
+	// XAdd appends to the Redis Stream.
+	// The message remains persistent and moves to the Pending Entries List (PEL)
+	// when a consumer reads it, remaining there until explicitly acknowledged via XACK.
+	msgID, err := RedisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: StreamName,
+		Values: taskValues,
+	}).Result()
+
 	if err != nil {
-		return fmt.Errorf("failed to marshal task: %w", err)
+		return fmt.Errorf("failed to append task to stream %s: %w", StreamName, err)
 	}
 
-	err = RedisClient.LPush(ctx, "drift_check_queue", taskJSON).Err()
-	if err != nil {
-		return fmt.Errorf("failed to push task: %w", err)
-	}
-	fmt.Printf("dispatched task for path: %s\n", storagePath)
+	fmt.Printf("dispatched task [ID: %s] to stream '%s' for project %d (path: %s)\n", msgID, StreamName, projectid, storagePath)
 	return nil
 }
