@@ -17,7 +17,9 @@ from azure.storage.blob import BlobServiceClient
 
 
 RESULTS_QUEUE = "results_queue"
-QUEUE_NAME = "drift_check_queue"
+STREAM_NAME = "drift_check_stream"
+GROUP_NAME = "drift_workers"
+CONSUMER_NAME = os.getenv("HOSTNAME", f"worker-{os.getpid()}")
 
 
 def connect_redis():
@@ -26,13 +28,14 @@ def connect_redis():
             r = redis.Redis(
                 host=os.getenv("REDIS_HOST", "localhost"),
                 port=6379,
-                db=0
+                db=0,
+                decode_responses=True
             )
             r.ping()
             print("connected to Redis")
             return r
-        except:
-            print("waiting for Redis...")
+        except Exception as e:
+            print(f"waiting for Redis... ({e})")
             time.sleep(2)
 
 
@@ -233,32 +236,85 @@ def json_converter(obj):
         return float(obj)
 
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
+def ensure_consumer_group(r):
+    try:
+        r.xgroup_create(STREAM_NAME, GROUP_NAME, id="$", mkstream=True)
+        print(f"Initialized Redis stream '{STREAM_NAME}' and consumer group '{GROUP_NAME}'")
+    except redis.exceptions.ResponseError as e:
+        if "BUSYGROUP" in str(e):
+            print(f"Consumer group '{GROUP_NAME}' ready on stream '{STREAM_NAME}'")
+        else:
+            raise e
+
+
+def process_and_ack_task(r, message_id, task_data):
+    print(f"\n[STREAM] Processing task [ID: {message_id}] for project {task_data.get('project_id')}")
+
+    results = process_task(task_data)
+
+    r.lpush(
+        RESULTS_QUEUE,
+        json.dumps(results, default=json_converter)
+    )
+    print(f"Results pushed to {RESULTS_QUEUE}")
+
+    # Acknowledge task completion to remove it from the Pending Entries List (PEL)
+    r.xack(STREAM_NAME, GROUP_NAME, message_id)
+    print(f"[ACK] Task [ID: {message_id}] successfully acknowledged\n")
+
+
 def main():
     r = connect_redis()
+    ensure_consumer_group(r)
 
-    print("worker ready")
+    print(f"Worker '{CONSUMER_NAME}' ready and listening on stream '{STREAM_NAME}' (Group: '{GROUP_NAME}')")
 
     while True:
-        task_data = r.brpop(QUEUE_NAME, timeout=5)
-
-        if not task_data:
-            continue
-
-        _, task_json = task_data
-
         try:
-            task = json.loads(task_json.decode("utf-8"))
-            results = process_task(task)
-
-            r.lpush(
-                RESULTS_QUEUE,
-                json.dumps(results, default=json_converter)
+            # 1. First, check for any pending un-ACKed messages for this consumer (recovery after crash/restart)
+            pending_entries = r.xreadgroup(
+                groupname=GROUP_NAME,
+                consumername=CONSUMER_NAME,
+                streams={STREAM_NAME: "0"},
+                count=1,
             )
 
-            print(
-                f"results pushed to {RESULTS_QUEUE}")
+            has_pending = False
+            if pending_entries:
+                for stream, messages in pending_entries:
+                    for message_id, task_data in messages:
+                        if task_data:
+                            has_pending = True
+                            print(f"[RECOVERY] Found un-ACKed pending task [ID: {message_id}]")
+                            process_and_ack_task(r, message_id, task_data)
+
+            # 2. If no pending tasks remain, block-read new incoming messages (block up to 5s)
+            if not has_pending:
+                entries = r.xreadgroup(
+                    groupname=GROUP_NAME,
+                    consumername=CONSUMER_NAME,
+                    streams={STREAM_NAME: ">"},
+                    count=1,
+                    block=5000,
+                )
+
+                if not entries:
+                    continue
+
+                for stream, messages in entries:
+                    for message_id, task_data in messages:
+                        if task_data:
+                            process_and_ack_task(r, message_id, task_data)
+
+        except redis.ConnectionError:
+            print("Redis connection dropped, reconnecting...")
+            r = connect_redis()
+            time.sleep(2)
         except Exception as e:
-            print("[ERROR]", e)
+            print("[ERROR in worker loop]", e)
+            time.sleep(2)
 
 
 if __name__ == "__main__":

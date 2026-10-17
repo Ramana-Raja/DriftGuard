@@ -115,7 +115,7 @@ flowchart TD
 ### End-to-End Workflow
 
 1. **Model Deployment**: A user uploads a trained model (`.pkl`) and supplies a live dataset endpoint (`CSV URL`). The Go backend commits records to PostgreSQL and uploads artifacts to Azure Blob Storage under `models/` and `datasets/`.
-2. **Periodic Inspection**: The Go background scheduler iterates every minute through all active deployed models and pushes inspection tasks into Redis (`drift_check_queue`).
+2. **Periodic Inspection**: The Go background scheduler iterates every minute through all active deployed models and pushes inspection tasks into the Redis Stream (`drift_check_stream`).
 3. **Drift Evaluation**: A Python worker pulls the task, retrieves the baseline dataset and current dataset, and executes statistical tests on every feature.
 4. **Autonomous Retraining**: If data drift exceeds statistical thresholds:
    - The worker splits the updated dataset into train/test sets.
