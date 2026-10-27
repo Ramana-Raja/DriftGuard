@@ -18,6 +18,7 @@
 - [Overview & Key Problems Solved](#-overview--key-problems-solved)
 - [Key Features](#-key-features)
 - [System Architecture](#-system-architecture)
+- [Fault-Tolerant Task Orchestration (Redis Streams & ACK Architecture)](#-fault-tolerant-task-orchestration-redis-streams--ack-architecture)
 - [Statistical Drift Detection Suite](#-statistical-drift-detection-suite)
 - [Repository Structure](#-repository-structure)
 - [Prerequisites & Environment Variables](#-prerequisites--environment-variables)
@@ -47,7 +48,8 @@ In production machine learning systems, model decay is silent and inevitable. As
 ## ⚡ Key Features
 
 - **High-Throughput Go API**: Built with Go 1.25, Gin, and GORM with connection pooling tuned for high-concurrency cloud databases (Azure PostgreSQL).
-- **Asynchronous Master-Worker Engine**: Go API dispatches jobs onto Redis queues; distributed Python workers asynchronously consume tasks and compute drift statistics.
+- **Fault-Tolerant Task Orchestration (Redis Streams & ACK System)**: Eliminates message loss during worker crashes or container evictions. Uses Redis Streams (`XAdd`), Consumer Groups (`XReadGroup`), and explicit acknowledgements (`XACK`) to enforce at-least-once delivery with automatic crash recovery.
+- **Dead-Letter Queue (DLQ) & Poison Pill Mitigation**: Detects tasks causing hard worker crashes (OOMs, Segfaults) via `XPENDING` delivery attempt tracking. Tasks exceeding 3 attempts are automatically isolated into `drift_check_dead_letter`, preventing infinite crash loops and CPU waste.
 - **Automated Retraining & Zero-Touch Deployment**: Automatically retrains scikit-learn models upon confirmed drift and persists new artifacts.
 - **Automated Versioning & Lineage**: Automatically increments versions (`v1.pkl`, `v2.pkl`) and snapshots datasets (`v1.csv`, `v2.csv`) to Azure Blob Storage while tracking lineage in PostgreSQL.
 - **Modern Responsive Dashboard**: Built-in web UI with dark/light mode toggle, project management, real-time status indicators, model version histories, and drag-and-drop model uploads.
@@ -73,9 +75,11 @@ flowchart TD
         PromHandler["Prometheus Metrics Handler"]
     end
 
-    subgraph DataQueue["Message Broker & Database"]
+    subgraph DataQueue["Message Broker & Reliability Layer"]
         PG[("PostgreSQL Database - Metadata & Lineage")]
-        RedisQueue[("Redis 7 Task Broker - Queues")]
+        Stream[("Redis Stream: drift_check_stream<br/>Group: drift_workers | PEL Active Tracking")]
+        DLQ[("Dead-Letter Stream: drift_check_dead_letter<br/>Poison Pill Isolation")]
+        ResultsQ[("Redis List: results_queue")]
     end
 
     subgraph CloudStorage["Cloud Object Storage"]
@@ -83,7 +87,7 @@ flowchart TD
     end
 
     subgraph WorkerFleet["DriftGuard Worker Fleet (Python)"]
-        Worker["Worker Process - BRPOP"]
+        Worker["Worker Process - XReadGroup Consumer"]
         DriftEngine["Statistical Drift Detection Engine"]
         Trainer["Retraining & Evaluation Engine"]
     end
@@ -98,15 +102,17 @@ flowchart TD
     API --> JWT
     API --> PG
     CRON -->|"Query Active Models"| PG
-    CRON -->|"Dispatch Task"| RedisQueue
+    CRON -->|"XAdd Tasks"| Stream
     API -->|"Persist Artifacts"| AzureBlob
 
-    RedisQueue -->|"Pop Task"| Worker
+    Stream -->|"XReadGroup (Exclusive Assignment)"| Worker
+    Worker -->|"Exceeded 3 Retries (Poison Pill)"| DLQ
     Worker --> DriftEngine
     DriftEngine -->|"Fetch Baseline & Live Data"| AzureBlob
     DriftEngine -->|"Drift Confirmed"| Trainer
     Trainer -->|"Upload Retrained Model & Dataset"| AzureBlob
-    Worker -->|"Push Status"| RedisQueue
+    Worker -->|"Push Outcome"| ResultsQ
+    Worker -->|"XACK (Clear from PEL)"| Stream
 
     PromHandler --> Prom
     Prom --> Graf
@@ -115,14 +121,58 @@ flowchart TD
 ### End-to-End Workflow
 
 1. **Model Deployment**: A user uploads a trained model (`.pkl`) and supplies a live dataset endpoint (`CSV URL`). The Go backend commits records to PostgreSQL and uploads artifacts to Azure Blob Storage under `models/` and `datasets/`.
-2. **Periodic Inspection**: The Go background scheduler iterates every minute through all active deployed models and pushes inspection tasks into the Redis Stream (`drift_check_stream`).
-3. **Drift Evaluation**: A Python worker pulls the task, retrieves the baseline dataset and current dataset, and executes statistical tests on every feature.
-4. **Autonomous Retraining**: If data drift exceeds statistical thresholds:
+2. **Periodic Inspection & Stream Append**: The Go background scheduler iterates every minute through all active deployed models and appends inspection tasks into the Redis Stream (`drift_check_stream`) via `XAdd`.
+3. **Exclusive Consumer Group Reading**: Distributed Python workers query the consumer group (`drift_workers`) using `XReadGroup`. Redis exclusively assigns the task to a single worker and places it in that worker's Pending Entries List (PEL). No other worker can access or duplicate this job.
+4. **Poison Pill Check**: The worker inspects the message's delivery attempt count (`XPENDING`). If a task has caused repeated crashes exceeding 3 attempts, it is automatically routed to the Dead-Letter Stream (`drift_check_dead_letter`), acknowledged with `XACK`, and reported as permanently failed—preventing infinite crash loops and compute waste.
+5. **Drift Evaluation**: The worker pulls the baseline and current datasets and executes the statistical drift suite (KS-test, PSI, Wasserstein, Chi-Square, Correlation Shift).
+6. **Autonomous Retraining**: If data drift exceeds statistical thresholds:
    - The worker splits the updated dataset into train/test sets.
    - Retrains the model, verifies classification accuracy with scikit-learn.
    - Automatically increments the model version (`v1` $\rightarrow$ `v2`).
    - Uploads new model weights and updated reference data to Azure Blob Storage.
    - Pushes completion metadata to `results_queue`.
+7. **Explicit Acknowledgement (`XACK`)**: Upon successful completion, the worker pushes results to `results_queue` and sends an `XACK` to Redis, permanently removing the task from the Pending Entries List.
+
+---
+
+## 🛡️ Fault-Tolerant Task Orchestration (Redis Streams & ACK Architecture)
+
+Traditional message queues rely on naive pop mechanics (`LPUSH` / `BRPOP`), where a task is deleted from memory the exact microsecond a worker picks it up. If a worker gets killed (Out-Of-Memory `SIGKILL`, hardware failure, or pod eviction), the task is **lost permanently**.
+
+DriftGuard implements an enterprise-grade **At-Least-Once Delivery** architecture powered by **Redis Streams**, **Consumer Groups**, and **Dead-Letter Queues (DLQ)**.
+
+```mermaid
+flowchart LR
+    A["Go Scheduler<br/>(XAdd)"] --> B["Stream: drift_check_stream"]
+    B --> C["XReadGroup (Consumer Group)"]
+    C --> D["Pending Entries List (PEL)<br/>(In-Flight Lock)"]
+    D --> E{"Delivery Attempts > 3?"}
+    E -- "Yes (Poison Pill)" --> F["Dead-Letter Stream<br/>(drift_check_dead_letter)"]
+    F --> G["XACK (Purge from Stream)"]
+    E -- "No" --> H["Execute process_task()"]
+    H --> I["Upload to Azure Blob"]
+    I --> J["XACK (Clear from PEL)"]
+```
+
+### 1. In-Flight Task Isolation (Pending Entries List)
+* When a worker instance calls `XReadGroup` with consumer group `drift_workers`, Redis assigns the task **exclusively to that worker** and records it in the **Pending Entries List (PEL)**.
+* **Zero Duplicate Processing**: Other active workers querying the stream with `>` will **never** receive the same task. Workers never "gang up" or duplicate execution.
+* If a worker container crashes or restarts, it inspects its assigned pending messages (`ID: 0`) on startup and safely resumes in-flight tasks.
+
+### 2. Dead-Letter Queue (DLQ) & Poison Pill Mitigation
+A **Poison Pill** occurs when a corrupted dataset or massive matrix payload causes an uncatchable low-level system crash (such as an OS kernel Out-Of-Memory `SIGKILL` or C-level segmentation fault). Without protection, a restarted worker would repeatedly attempt the fatal task in an infinite crash loop.
+
+* **Delivery Attempt Tracking**: On every task pickup, the worker inspects metadata via `XPENDING` (`times_delivered`).
+* **Automated Isolation**: If a task fails or causes a crash more than **3 times** (`MAX_RETRIES = 3`):
+  1. The task is bypassed without executing `process_task` (saving 100% of CPU and RAM).
+  2. The payload and crash reason are forwarded to `drift_check_dead_letter` for engineer auditing.
+  3. A failure event is published to `results_queue`.
+  4. An explicit `XACK` is sent to purge the poison pill from `drift_check_stream`.
+
+### 3. Why This Beats Manual "Two-Queue Lock & Timeout" Architectures
+Older architectures attempt to emulate reliable processing using two Redis lists (`tasks_queue` and `processing_queue`) paired with distributed locks and TTL timeouts. That approach introduces severe failure modes that Redis Streams avoids:
+* **No Split-Brain / Zombie Tasks**: In manual timeout designs, if a heavy model training job takes 10m 5s against a 10m timeout, the reaper assumes the worker died, re-queues the task, and a second worker begins training in parallel—causing competing model uploads and wasted compute.
+* **No Distributed Lock Expiration**: Redis Streams handles task assignment, idle tracking, and acknowledgements atomically in native C, eliminating distributed lock TTL race conditions.
 
 ---
 

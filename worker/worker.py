@@ -19,7 +19,9 @@ from azure.storage.blob import BlobServiceClient
 RESULTS_QUEUE = "results_queue"
 STREAM_NAME = "drift_check_stream"
 GROUP_NAME = "drift_workers"
+DEAD_LETTER_STREAM = "drift_check_dead_letter"
 CONSUMER_NAME = os.getenv("HOSTNAME", f"worker-{os.getpid()}")
+MAX_RETRIES = 3
 
 
 def connect_redis():
@@ -249,8 +251,50 @@ def ensure_consumer_group(r):
             raise e
 
 
+def get_delivery_count(r, message_id):
+    try:
+        pending_info = r.xpending_range(STREAM_NAME, GROUP_NAME, min=message_id, max=message_id, count=1)
+        if pending_info:
+            return pending_info[0].get("times_delivered", 1)
+    except Exception as e:
+        print(f"[WARN] Failed to read delivery count for {message_id}: {e}")
+    return 1
+
+
+def handle_poison_pill(r, message_id, task_data, attempts):
+    print(f"\n[POISON PILL] Task [ID: {message_id}] failed {attempts} times. Purging to Dead-Letter Stream '{DEAD_LETTER_STREAM}'.")
+
+    # 1. Forward task to Dead-Letter Stream for auditing
+    dlq_payload = {
+        **task_data,
+        "error_reason": f"Exceeded maximum retry limit of {MAX_RETRIES} attempts. Task caused repeated worker crashes or unhandled failures.",
+        "original_message_id": message_id,
+        "times_delivered": str(attempts),
+    }
+    r.xadd(DEAD_LETTER_STREAM, dlq_payload)
+
+    # 2. Inform results_queue of permanent failure
+    failed_result = {
+        "status": "failed",
+        "project_id": str(task_data.get("project_id", "")),
+        "data_drift_detected": False,
+        "error_message": f"Task purged to Dead-Letter Queue after {attempts} failed delivery attempts.",
+        "traceback": None,
+    }
+    r.lpush(RESULTS_QUEUE, json.dumps(failed_result, default=json_converter))
+
+    # 3. Acknowledge message to remove poison pill from the active stream PEL
+    r.xack(STREAM_NAME, GROUP_NAME, message_id)
+    print(f"[DLQ] Task [ID: {message_id}] purged and acknowledged from '{STREAM_NAME}'.\n")
+
+
 def process_and_ack_task(r, message_id, task_data):
-    print(f"\n[STREAM] Processing task [ID: {message_id}] for project {task_data.get('project_id')}")
+    attempts = get_delivery_count(r, message_id)
+    if attempts > MAX_RETRIES:
+        handle_poison_pill(r, message_id, task_data, attempts)
+        return
+
+    print(f"\n[STREAM] Processing task [ID: {message_id}] (Attempt {attempts}/{MAX_RETRIES}) for project {task_data.get('project_id')}")
 
     results = process_task(task_data)
 
